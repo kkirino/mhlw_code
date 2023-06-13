@@ -1,0 +1,6 @@
+*.xls
+*.xlsx
+*.csv
+*.html
+document/*
+script/adhoc.r
