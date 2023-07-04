@@ -2,5 +2,5 @@
 *.xlsx
 *.csv
 *.html
-document/*
+data/*
 script/adhoc.r

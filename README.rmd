@@ -1,23 +1,26 @@
 ---
-title: "医療用医薬品の投与経路および成分名・規格の対応表作成"
+title: "薬価基準収載医薬品コードにもとづき成分名・投与経路・規格が整理・格納された医薬品マスター"
 date: "2023-06-02 (updated: `r Sys.Date()`)"
 output: github_document
+always_allow_html: true
 ---
 
 ## はじめに
 
-医療用医薬品を投与経路および成分・規格ごとに分類して目的の医薬品を明確に指定するためには、薬価基準収載医薬品コードが有用である。
+医療用医薬品を成分名・投与経路および規格ごとに分類して目的の医薬品を明確に指定するためには、薬価基準収載医薬品コードが有用である。
 
-薬価基準収載医薬品コードに関する情報は厚生労働省 WEB サイトにリストとして定期的に掲載されているが、年度毎または薬価/診療報酬改定のたびに更新され、過去の情報がリストより失われる。<br>
+薬価基準収載医薬品コードに関する情報は厚生労働省 WEB サイトにリストとして定期的に掲載されているが、年度毎または薬価改訂/診療報酬改定のたびに更新され、過去の情報がリストより失われる。<br>
 長期間にわたるデータベース解析を実施するためには、過去の医療用医薬品をすべてアーカイブしたようなマスターが必要である。
 
-本リポジトリでは、厚生労働省 WEB サイトより取得可能な公開情報を利用して、薬価基準収載医薬品コードと投与経路・成分名および規格のマスター作製を行う。
+本リポジトリでは、厚生労働省 WEB サイトより取得可能な公開情報を利用して、薬価基準収載医薬品コードにもとづき医療用医薬品の成分名・投与経路・規格を格納したマスター作製を行う。
 
 ## 公開情報の取得
 
 ### WEB ページ
 
 厚生労働省 WEB サイト [医療保険分野のトピックス](https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/topics_150856_142.html) より該当する以下のページリンクを同定し、情報源となるエクセルファイルを取得する。
+
+既存の資料のアーカイブを目的とするため、ページやファイルの更新が終了した 2022 年度までを対象とする。
 
 
 ```{r setup, echo=FALSE}
@@ -27,73 +30,80 @@ knitr::opts_chunk$set(
   warning = FALSE,
   results = "asis"
 )
+options(knitr.kable.NA = "")
 ```
 
 ```{r library}
-library(readxl)
+library(here)
+library(readr)
 library(dplyr)
+library(tidyr)
 library(stringr)
 library(knitr)
+library(kableExtra)
 ``` 
 
 ```{r data_import}
-pages <- read_xlsx(
-  "./document/definition.xlsx",
-  sheet = "WEBページ"
-)
-
-previous_files <- read_xlsx(
-  "./document/definition.xlsx",
-  sheet = "過去ファイル"
-)
-
-latest_files <- read_xlsx(
-  "./document/definition.xlsx",
-  sheet = "現行ファイル"
-)
+page_info <- read_csv(here("document", "page_info"))
+file_info <- read_csv(here("document", "file_info"))
 ```
 
 
-```{r pages}
-pages |>
+```{r page_info}
+page_info |>
   transmute(
-    ページタイトル = str_c("- [", ページタイトル, "](", ページURL, ")")
+    ページID,
+    掲載開始年度,
+    ページタイトル = cell_spec(ページタイトル, link = ページURL)
   ) |>
-  t() |>
-  as.vector() |>
-  str_c(collapse = "\n") |>
-  cat()
+  kable(escape = FALSE, align = "ccl") |>
+  kable_styling(font_size = 14)
 ```
 
 
-### 過去に公開されたファイル
+### ファイル
 
-上記の WEB ページより以下の過去分のファイルをダウンロード・アーカイブし、マスター作成に用いる。
+上記の WEB ページより以下の過去分の全ファイルをダウンロードする。
 
-```{r previous_files}
-previous_files |>
+```{r file_info}
+file_info |>
   transmute(
-    該当年度,
-    ファイル名 = str_c("[", basename(ファイルURL), "](", ファイルURL, ")")
+    ページID,
+    掲載開始年度,
+    ファイル種別 = case_when(
+      str_detect(ファイル名, "(a|(_1)|(_01))\\.xls(x)?$") ~ "内用薬",
+      str_detect(ファイル名, "(b|(_2)|(_02))\\.xls(x)?$") ~ "注射薬",
+      str_detect(ファイル名, "(c|(_3)|(_03))\\.xls(x)?$") ~ "外用薬",
+      str_detect(ファイル名, "(d|(_4)|(_04))\\.xls(x)?$") ~ "歯科用薬剤",
+    ),
+    ファイル種別 = replace_na(ファイル種別, "全区分"),
+    ファイル = cell_spec("link", link = ファイルURL)
   ) |>
-  kable()
+  pivot_wider(
+    id_cols = c(ページID, 掲載開始年度), names_from = ファイル種別, values_from = ファイル
+  ) |>
+  kable(escape = FALSE, align = "c")
 ```
 
-### 最新のファイル
 
-本ドキュメント記載時 (`r Sys.Date()`) における最新のファイルは下記である。
+## データの連結
 
-```{r latest_files}
-latest_files |>
-  transmute(
-    該当年度,
-    ファイル名 = str_c("[", basename(ファイルURL), "](", ファイルURL, ")")
-  ) |>
-  kable()
-```
+各ファイルおよびそのメタデータである`掲載開始年度`を、以下の構造となるよう加工する。
 
-## データの連結と加工
+| 列番号 | 変数名                   | 型 
+|:------:|--------------------------|------------------------------------
+|   1    | 薬価基準収載医薬品コード | 文字列 (6桁の数字+英数字+4桁の数字)
+|   2    | 成分名                   | 文字列
+|   3    | 投与経路                 | 文字列
+|   4    | 規格                     | 文字列
+|   5    | 品名                     | 文字列
+|   6    | メーカー名               | 文字列
+|   7    | 掲載開始年度             | 整数
 
+
+## データ加工・クレンジングと検討項目の抽出
+
+- `品名`について、一部のファイルで不要な文字列 (「局」) を除く処理を行う。
 
 ## 疑義に対する処理
 

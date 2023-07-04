@@ -73,6 +73,22 @@ out <- tmp |>
     ),
   )
 
+unit_code_master <- read_csv(
+  file.path(root_dir, "unit_code_master.csv"),
+  col_names = FALSE,
+  col_types = cols(.default = col_character())
+) |>
+  mutate(X2 = stri_trans_nfkc(X2))
+
+out |>
+  left_join(unit_code_master, by = c("基準単位" = "X2")) |>
+  filter(is.na(X1) & !is.na(基準単位)) |>
+  View()
+
+out |>
+  filter(成分名 == "アスピリン") |>
+  View()
+
 # 標準出力
 write.csv(out, stdout(), row.names = FALSE, quote = FALSE, na = "")
 
